@@ -78,8 +78,10 @@ typedef struct
 kpage_t* gentryptr=0;
 
 /************Function Prototypes******************************************/
-int roundup(kma_size_t size);
+kma_size_t roundup(kma_size_t size);
+int chkfreespace(klistheader_t* page,kma_size_t size);// 0:not enough, >1: enough space
 kpage_t* initial(kpage_t* page);
+void* addbuffer(klistheader_t* page,kma_size_t size);
 
 /************External Declaration*****************************************/
 
@@ -92,15 +94,25 @@ kma_malloc(kma_size_t size)
 		return NULL;
 	}
 	int i;
+	void* ret;
 	klistheader_t* page;
 	
 	if(!gentryptr){// initialized the entry
 		gentryptr=initial(get_page());
 		page=(klistheader_t*)(gentryptr->ptr);
-		printf("%d\n%d\n",page,((*page).freememory));
-		
 	}
+	page=(klistheader_t*)(gentryptr->ptr);
+	
 	i=roundup(size);
+	i=chkfreespace(page,size);
+	printf("%ld\n",(long int)((*page).freememory));
+	ret=addbuffer(page,roundup(size));
+	long int pagestartaddr=(long int)(page);
+	long int pageretstartaddr=(long int)(ret);
+	
+	printf("%ld\n",pagestartaddr);
+	printf("%ld\n",pageretstartaddr);
+	printf("%ld\n",(long int)((*page).freememory));
 
 	return NULL;
 }
@@ -112,8 +124,8 @@ kma_free(void* ptr, kma_size_t size)
   ;//we need to clean the  freelist when there is nothing left
 }
 
-int roundup(kma_size_t size){
-	int ret=16;
+kma_size_t roundup(kma_size_t size){
+	kma_size_t ret=16;
 	while(size>ret){
 		ret=ret<<1;
 	}
@@ -133,6 +145,35 @@ kpage_t* initial(kpage_t* page){
 	}
 	(*listheader).freememory=(void*)((long int)listheader+sizeof(klistheader_t));
 	return page;
+}
+
+int chkfreespace(klistheader_t* page,kma_size_t size){
+	return (bool)(PAGESIZE+(long int)page-(long int)((*page).freememory))/(size+sizeof(kbuffer_t));
+}
+
+void* addbuffer(klistheader_t* page,kma_size_t size){
+	int i=4;
+	void* ret;
+	kbuffer_t* buffer;
+	kfreelist_t* freelist;
+	while((1<<i)!=size)
+	{
+		i++;
+	}
+	i=i-4;
+	buffer=(kbuffer_t*)((*page).freememory);
+	freelist=(kfreelist_t*)&((*page).p2fl[i]);
+	ret=(void*)buffer+sizeof(kbuffer_t);
+	*(kfreelist_t**)(buffer)=freelist;//point the list it belonging to
+	(*page).freememory=(void*)(buffer+size+sizeof(kbuffer_t));
+	return ret;
+/*	
+//	((*page).p2fl[i]).buffer=(*page).freememory;
+	(void*)(*(void**)(((*page).freememory)))=(void*)((*page).p2fl[i]);//point the list it belonging to
+	ret=(void*)((long int)((*page).freememory)+sizeof(kbuffer_t));
+	(*page).freememory=(void*)((long int)((*page).freememory)+size+sizeof(kbuffer_t));// point to the next available memory
+	return ret;
+*/
 }
 
 #endif // KMA_P2FL
