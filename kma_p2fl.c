@@ -54,7 +54,16 @@
  *  structures and arrays, line everything up in neat columns.
  */
 
+typedef struct
+{
+	void* nextbuffer;// if it equals the nestlist, it is used
+	void* nextlist;
+	int size;
+} kfreelist_t;
+
 /************Global Variables*********************************************/
+
+kpage_t* gentryptr=0;
 
 /************Function Prototypes******************************************/
 
@@ -65,13 +74,21 @@
 void*
 kma_malloc(kma_size_t size)
 {
-  return NULL;
+	if ((size + sizeof(void*)) > PAGESIZE){ // requested size too large
+		return NULL;
+	}
+	if(!gentryptr){// initialized the entry
+		gentryptr = get_page();
+		*((kpage_t**)gentryptr.ptr) = gentryptr;	
+	}
+	return NULL;
 }
 
 void
 kma_free(void* ptr, kma_size_t size)
 {
-  ;
+	
+  ;//we need to clean the  freelist when there is nothing left
 }
 
 #endif // KMA_P2FL
