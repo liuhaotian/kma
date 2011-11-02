@@ -56,16 +56,30 @@
 
 typedef struct
 {
-	void* nextbuffer;// if it equals the nestlist, it is used
-	void* nextlist;
+	void* nextbuffer;
+} kbuffer_t;
+
+typedef struct
+{
+	kbuffer_t* buffer;// if it equals the nestlist, it is used
 	int size;
 } kfreelist_t;
+
+typedef struct
+{
+	void* itself;
+	void* nextpage;
+	kfreelist_t p2fl[10];
+	void* freememory;
+} klistheader_t;
 
 /************Global Variables*********************************************/
 
 kpage_t* gentryptr=0;
 
 /************Function Prototypes******************************************/
+int roundup(kma_size_t size);
+kpage_t* initial(kpage_t* page);
 
 /************External Declaration*****************************************/
 
@@ -77,10 +91,17 @@ kma_malloc(kma_size_t size)
 	if ((size + sizeof(void*)) > PAGESIZE){ // requested size too large
 		return NULL;
 	}
+	int i;
+	klistheader_t* page;
+	
 	if(!gentryptr){// initialized the entry
-		gentryptr = get_page();
-		*((kpage_t**)gentryptr.ptr) = gentryptr;	
+		gentryptr=initial(get_page());
+		page=(klistheader_t*)(gentryptr->ptr);
+		printf("%d\n%d\n",page,((*page).freememory));
+		
 	}
+	i=roundup(size);
+
 	return NULL;
 }
 
@@ -89,6 +110,29 @@ kma_free(void* ptr, kma_size_t size)
 {
 	
   ;//we need to clean the  freelist when there is nothing left
+}
+
+int roundup(kma_size_t size){
+	int ret=16;
+	while(size>ret){
+		ret=ret<<1;
+	}
+	return ret;
+}
+
+kpage_t* initial(kpage_t* page){
+	klistheader_t* listheader;
+	int i;
+	*((kpage_t**)page->ptr) = page;
+	
+	listheader=(klistheader_t*)(page->ptr);
+	for(i = 0; i < 10; ++i)
+	{
+		((*listheader).p2fl[i]).buffer=0;
+		((*listheader).p2fl[i]).size=1<<(i+4);
+	}
+	(*listheader).freememory=(void*)((long int)listheader+sizeof(klistheader_t));
+	return page;
 }
 
 #endif // KMA_P2FL
