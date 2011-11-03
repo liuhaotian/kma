@@ -70,8 +70,8 @@ typedef struct
 	void* itself;
 	int numpages;//from 0 to max, the 1st one is 0
 	int numalloc;// 0 means nothing
-	kfreelist_t p2fl[10];
 	void* freememory;
+	kfreelist_t p2fl[10];
 } klistheader_t;
 
 /************Global Variables*********************************************/
@@ -131,8 +131,8 @@ kma_malloc(kma_size_t size)
 	}
 	else{
 		initial(get_page());
-		
-		i=++(*mainpage).numpages;
+		(*mainpage).numpages++;
+		i=(*mainpage).numpages;
 		temppage=(klistheader_t*)((long int)mainpage + i * PAGESIZE);
 		ret=buffermalloc(temppage,size);// already incease the (*mainpage).numalloc++;
 		return ret;
@@ -160,8 +160,7 @@ kma_free(void* ptr, kma_size_t size)// when delete, we add the buffer to the gen
 	freelist = (kfreelist_t*)((*buffer).nextbuffer);
 	
 	nextbuffer=((*freelist).buffer);
-	(*freelist).buffer=buffer;
-	buffer=nextbuffer;
+	(*buffer).nextbuffer=nextbuffer;
 	
 	klistheader_t* mainpage=(klistheader_t*)(gentryptr->ptr);
 	(*mainpage).numalloc--;
@@ -170,9 +169,10 @@ kma_free(void* ptr, kma_size_t size)// when delete, we add the buffer to the gen
 		kpage_t* temppage;
 		for(; (*mainpage).numpages >=0; (*mainpage).numpages--)
 		{
-			temppage = *((kpage_t**)((long int)gentryptr->ptr + (*mainpage).numpages * PAGESIZE));
+			temppage = *((kpage_t**)((long int)mainpage + (*mainpage).numpages * PAGESIZE));
 			free_page(temppage);
 		}
+		//(*mainpage).numpages is -1 no
 		gentryptr=0;//all pages are free
 	}
 	//free_page(page);
@@ -234,7 +234,7 @@ void* buffermalloc(klistheader_t* page,kma_size_t size){//point to the main list
 	freelist=(kfreelist_t*)&((*mainpage).p2fl[i]);
 	ret=(void*)buffer+sizeof(kbuffer_t);
 	(*buffer).nextbuffer=(void*)freelist;//point the list it belonging to
-	(*page).freememory=(void*)((long int)buffer+size+sizeof(kbuffer_t));
+	(*page).freememory=(void*)buffer+size+sizeof(kbuffer_t);
 	(*mainpage).numalloc++;
 	return ret;
 }
