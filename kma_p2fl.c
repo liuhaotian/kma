@@ -69,7 +69,7 @@ typedef struct
 {
 	void* itself;
 	int numpages;//from 0 to max, the 1st one is 0
-	int numalloc;// 0 means nothing
+	int numalloc;// 0 means nothing//each page hold one , if 0 then free
 	void* freememory;
 	kfreelist_t p2fl[10];
 } klistheader_t;
@@ -102,23 +102,23 @@ kma_malloc(kma_size_t size)
 	
 	if(!gentryptr){// initialized the entry
 		gentryptr=initial(get_page());
-		mainpage=(klistheader_t*)(gentryptr->ptr);
-		for(i = 0; i < 10; ++i)
-		{
-			((*mainpage).p2fl[i]).buffer=0;
-			((*mainpage).p2fl[i]).size=1<<(i+4);
-		}
-		(*mainpage).numalloc=0;
-		(*mainpage).numpages=0;
 	}
 	
 	mainpage=(klistheader_t*)(gentryptr->ptr);
 	
 	if((i=chkfreelist(size)))
 	{
-		i--;	
-		ret=(void*)(((*mainpage).p2fl[i]).buffer);
-		((*mainpage).p2fl[i]).buffer=(kbuffer_t*)((*((kbuffer_t*)ret)).nextbuffer);
+		i--;
+		int listindex=4;
+		while((1<<listindex)!=roundup(size))
+		{
+			listindex++;
+		}
+		listindex=listindex-4;
+		temppage=(klistheader_t*)((long int)mainpage + i * PAGESIZE);
+		ret=(void*)(((*temppage).p2fl[listindex]).buffer);
+		((*temppage).p2fl[i]).buffer=(kbuffer_t*)((*((kbuffer_t*)ret)).nextbuffer);
+		(*temppage).numalloc++;
 		(*mainpage).numalloc++;
 		return ret;
 	}
@@ -126,7 +126,7 @@ kma_malloc(kma_size_t size)
 	{
 		i--;
 		temppage=(klistheader_t*)((long int)mainpage + i * PAGESIZE);
-		ret=buffermalloc(temppage,size);// already incease the (*mainpage).numalloc++;
+		ret=buffermalloc(temppage,size);// already incease the (*temppage).numalloc++;
 		return ret;
 	}
 	else{
@@ -134,7 +134,7 @@ kma_malloc(kma_size_t size)
 		(*mainpage).numpages++;
 		i=(*mainpage).numpages;
 		temppage=(klistheader_t*)((long int)mainpage + i * PAGESIZE);
-		ret=buffermalloc(temppage,size);// already incease the (*mainpage).numalloc++;
+		ret=buffermalloc(temppage,size);// already incease the (*temppage).numalloc++;
 		return ret;
 	}
 	// find in list
@@ -163,20 +163,39 @@ kma_free(void* ptr, kma_size_t size)// when delete, we add the buffer to the gen
 	(*buffer).nextbuffer=nextbuffer;
 	
 	klistheader_t* mainpage=(klistheader_t*)(gentryptr->ptr);
+	klistheader_t* temppage;
+	int i;
+	i=((long int)ptr-(long int)mainpage)/PAGESIZE;
+	temppage=(klistheader_t*)((long int)mainpage + i * PAGESIZE);
+	(*temppage).numalloc--;
 	(*mainpage).numalloc--;
 	
-	if((*mainpage).numalloc==0){
-		kpage_t* temppage;
-		for(; (*mainpage).numpages >=0; (*mainpage).numpages--)
+	if((*temppage).numalloc==0){
+		kpage_t* page0;
+/*		for(; (*mainpage).numpages >=0; (*mainpage).numpages--)
 		{
 			temppage = *((kpage_t**)((long int)mainpage + (*mainpage).numpages * PAGESIZE));
 			free_page(temppage);
+		}*/
+		page0 = *(kpage_t**)(temppage);
+		initial(page0);
+		//free_page(page0);
+		//(*mainpage).numpages is -1 no
+		//gentryptr=0;//all pages are free
+	}
+	if((*mainpage).numalloc==0){
+		kpage_t* page1;
+		page1 = *(kpage_t**)(mainpage);
+		for(; (*mainpage).numpages >=0; (*mainpage).numpages--)
+		{
+			page1 = *((kpage_t**)((long int)mainpage + (*mainpage).numpages * PAGESIZE));
+			free_page(page1);
 		}
 		//(*mainpage).numpages is -1 no
 		gentryptr=0;//all pages are free
 	}
 	//free_page(page);
-  ;//we need to clean the  freelist when there is nothing left
+  //we need to clean the  freelist when there is nothing left
 }
 
 kma_size_t roundup(kma_size_t size){
@@ -190,9 +209,15 @@ kma_size_t roundup(kma_size_t size){
 kpage_t* initial(kpage_t* page){
 	klistheader_t* listheader;
 	*((kpage_t**)page->ptr) = page;
-	
+	int i;
 	listheader=(klistheader_t*)(page->ptr);
-	
+	for(i = 0; i < 10; ++i)
+	{
+		((*listheader).p2fl[i]).buffer=0;
+		((*listheader).p2fl[i]).size=1<<(i+4);
+	}
+	(*listheader).numpages=0;
+	(*listheader).numalloc=0;
 	(*listheader).freememory=(void*)((long int)listheader+sizeof(klistheader_t));
 	return page;
 }
@@ -211,10 +236,18 @@ int chkfreespace(kma_size_t size){
 
 int chkfreelist(kma_size_t size){
 	klistheader_t* mainpage=(klistheader_t*)(gentryptr->ptr);
+	klistheader_t* temppage;
 	int i;
-	for(i = 0; i < 10; ++i)
+	int listindex=4;
+	while((1<<listindex)!=roundup(size))
 	{
-		if((((*mainpage).p2fl[i]).size==roundup(size))&&(((*mainpage).p2fl[i]).buffer!=0))return i+1;
+		listindex++;
+	}
+	listindex=listindex-4;
+	for(i = 0; i <= (*mainpage).numpages; ++i)
+	{
+		temppage=(klistheader_t*)((long int)mainpage+i*PAGESIZE);
+		if(((*temppage).p2fl[listindex]).buffer!=0)return i+1;
 	}
 	return 0;
 }
@@ -235,6 +268,7 @@ void* buffermalloc(klistheader_t* page,kma_size_t size){//point to the main list
 	ret=(void*)buffer+sizeof(kbuffer_t);
 	(*buffer).nextbuffer=(void*)freelist;//point the list it belonging to
 	(*page).freememory=(void*)buffer+size+sizeof(kbuffer_t);
+	(*page).numalloc++;
 	(*mainpage).numalloc++;
 	return ret;
 }
