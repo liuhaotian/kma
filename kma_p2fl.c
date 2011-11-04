@@ -186,11 +186,14 @@ kma_free(void* ptr, kma_size_t size)// when delete, we add the buffer to the gen
 	if((*mainpage).numalloc==0){
 		kpage_t* page1;
 		page1 = *(kpage_t**)(mainpage);
-		for(; (*mainpage).numpages >=0; (*mainpage).numpages--)
+		for(; (*mainpage).numpages >0; (*mainpage).numpages--)
 		{
 			page1 = *((kpage_t**)((long int)mainpage + (*mainpage).numpages * PAGESIZE));
 			free_page(page1);
 		}
+		page1 = *((kpage_t**)((long int)mainpage + (*mainpage).numpages * PAGESIZE));
+		free_page(page1);
+		
 		//(*mainpage).numpages is -1 no
 		gentryptr=0;//all pages are free
 	}
