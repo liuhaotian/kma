@@ -80,6 +80,8 @@ typedef struct
 
 /************Global Variables*********************************************/
 
+kpageheader_t* mainpage;
+
 /************Function Prototypes******************************************/
 	
 /************External Declaration*****************************************/
@@ -89,6 +91,39 @@ typedef struct
 void*
 kma_malloc(kma_size_t size)
 {
+	if too large return NULL
+	
+	initial the entry only once
+	
+	check the free list for allocation
+	if true {
+		find the roundsize
+		if true{
+			allocate
+			current numalloc++
+			global numalloc++
+			change bitmap
+			return
+		}
+		else{
+			divide the large block
+			allocate
+			current numalloc++
+			global numalloc++
+			change bitmap
+			link the new small block to the free list
+			
+		}	
+	}
+	else{
+		create new page
+		initial the page
+		allocate
+		current numalloc++
+		global numalloc++
+		change bitmap
+		link the new small block to the current free list
+	}
 	
   return NULL;
 }
@@ -96,6 +131,27 @@ kma_malloc(kma_size_t size)
 void 
 kma_free(void* ptr, kma_size_t size)
 {
+	free it
+	change bitmap
+	according to the bitmap, combain the buddies
+	then delete the link from free list
+	add the new addr to free list
+	current numalloc--
+	global numalloc--
+	
+	if all global numalloc is 0{
+		free the pages from the last one to the first one
+		
+	}
+	else if current page empty{
+		if the last one{
+			free the current page
+			numpages--
+		}
+		else{
+			initial it
+		}
+	}
   ;
 }
 
