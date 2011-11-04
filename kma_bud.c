@@ -55,34 +55,47 @@
 
 typedef struct
 {
-	void* list_or_next;
-} kbufferheader_t;
+	void* nextbuffer;
+} kbuffer_t;
 
 typedef struct
 {
-	kbufferheader_t* buffer;
+	int 		size;
+	kbuffer_t* 	buffer;//point to the available one or nothing
 } klistheader_t;
 
 typedef struct
 {
-	int map[16];
-} kbitmap_t;
+	kpage_t*		ptr;// the origin res return by get page(), we need to free it
+	void*			addr;//the ptr.ptr, the start addr of the page
+	unsigned char	bitmap[64];// bit map, shows that the resource 
+	int				numalloc;
+} kpageheader_t;
 
 typedef struct
 {
-	void* itself;
-	int numpages;//from 0 to max, the 1st one is 0
-	int numalloc;// 0 means nothing//each page hold one , if 0 then free
-	kbitmap_t bitmap;
-	klistheader_t bud[10];
-	void* nothing[2];
-} kpageheader_t;
+	kpage_t*		itself;
+	int				numpages;//from 0 to max, the 1st one is 0
+	int				numalloc;// 0 means nothing//each page hold one , if 0 then free
+	klistheader_t	freelist[10];
+	kpageheader_t	page[100];
+	void*	nextmainpage;
+} kmainheader_t;
 
 /************Global Variables*********************************************/
 
-kpageheader_t* mainpage;
+kmainheader_t* mainpage=0;
 
 /************Function Prototypes******************************************/
+
+kmainheader_t* initial_mainheader(kpage_t* newpage);
+void initial_pageheader(kpageheader_t* pageheader, kpage_t* newpage);
+kma_size_t roundup(kma_size_t size);
+int chkfreelist(kma_size_t size);
+kpageheader_t* chkfreepage();
+klistheader_t* divi_bud(klistheader_t* bud_list, kma_size_t bud_size);
+void insertbuffer(klistheader_t* thefreelist, kbuffer_t* thebuffer);
+kbuffer_t* unlinkbuffer(klistheader_t* thefreelist);
 	
 /************External Declaration*****************************************/
 
@@ -91,9 +104,37 @@ kpageheader_t* mainpage;
 void*
 kma_malloc(kma_size_t size)
 {
-	if too large return NULL
+	if ((size + sizeof(void*)) > PAGESIZE){ // requested size too large
+		return NULL;
+	}
+	if(!mainpage){// initialized the entry
+		mainpage=initial_mainheader(get_page());
+	}
 	
-	initial the entry only once
+	int roundsize=roundup(size),i;
+
+
+	// if there is not enough page, we create one, the the freelist will be available
+	
+	
+	if((i=chkfreelist(size))){
+		i--;
+	}
+	else{
+		kpageheader_t* newpage=chkfreepage();// so we have the newpage. and it is available it freelist[9]
+		
+		
+		// divide the availalbe freelist to fit
+		/*
+		we need to return a new page header, no matter it is already exits in the mainpage chain, or it is just created from a newly mainpage chain
+		if the page is alloced, we just call kma_malloc again, or alloc it now
+		
+		
+		
+		*/
+	}
+
+/*	
 	
 	check the free list for allocation
 	if true {
@@ -124,13 +165,14 @@ kma_malloc(kma_size_t size)
 		change bitmap
 		link the new small block to the current free list
 	}
-	
+	*/
   return NULL;
 }
 
 void 
 kma_free(void* ptr, kma_size_t size)
 {
+	/*
 	free it
 	change bitmap
 	according to the bitmap, combain the buddies
@@ -152,7 +194,140 @@ kma_free(void* ptr, kma_size_t size)
 			initial it
 		}
 	}
+	*/
   ;
+}
+
+kmainheader_t* initial_mainheader(kpage_t* newpage){
+	kmainheader_t* ret;
+	
+	ret=(kmainheader_t*)(newpage->ptr);
+	(*ret).itself=newpage;
+	(*ret).numpages=0;
+	(*ret).numalloc=0;
+	(*ret).nextmainpage=0;
+	int i;
+	for(i = 0; i < 10; ++i)
+	{
+		(*ret).freelist[i].size=16<<i;
+		(*ret).freelist[i].buffer=0;
+	}
+	for(i = 0; i < 100; ++i)
+	{
+		(*ret).page[i].ptr=0;
+		//initial_pageheader(&((*ret).page[i]));
+	}
+	return ret;
+}
+
+void initial_pageheader(kpageheader_t* pageheader, kpage_t* newpage){
+	int j;
+	(*pageheader).ptr=newpage;
+	(*pageheader).addr=(kmainheader_t*)(newpage->ptr);
+	(*pageheader).numalloc=0;
+	for(j = 0; j < 64; ++j)
+	{
+		(*pageheader).bitmap[j]=0;
+	}
+	// add the whole page to free list
+	insertbuffer(&((*mainpage).freelist[9]), (kbuffer_t*)((*pageheader).addr));
+/*	kbuffer_t* tempbuffer;
+	tempbuffer=(*mainpage).freelist[9].buffer;
+	(*mainpage).freelist[9].buffer=(kbuffer_t*)((*pageheader).addr);
+	*((kbuffer_t*)((*pageheader).addr))=tempbuffer;
+*/
+}
+
+kma_size_t roundup(kma_size_t size){
+	kma_size_t ret=16;
+	while(size>ret){
+		ret=ret<<1;
+	}
+	return ret;
+}
+
+int chkfreelist(kma_size_t size){
+
+	int i;
+	int roundsize=roundup(size);
+	for(i = 0; i < 10; ++i)
+	{
+		if((*mainpage).freelist[i].size>=roundsize){
+			if((*mainpage).freelist[i].buffer!=0)return i+1;
+		}
+	}
+	return 0;
+}
+
+kpageheader_t* chkfreepage(){
+	kpageheader_t* ret;
+	kmainheader_t* temppage=mainpage;
+	int i;
+	
+	// find the available page header
+	while(1){
+		for(i = 0; i < 100; ++i)
+		{
+			if((*temppage).page[i].ptr==0){
+				ret=&((*temppage).page[i]);
+				break;
+			}
+		}
+		if((*temppage).nextmainpage==0)break;
+		temppage=(*temppage).nextmainpage;
+	}
+	
+	if(ret!=0)
+	{
+		initial_pageheader(ret, get_page());
+	}
+	else{
+		(*temppage).nextmainpage=initial_mainheader(get_page());
+		temppage=(*temppage).nextmainpage;
+		ret=&((*temppage).page[0]);
+		initial_pageheader(ret, get_page());
+	}
+	
+	return ret;
+}
+
+klistheader_t* divi_bud(klistheader_t* bud_list, kma_size_t bud_size){
+	if(bud_size==(*bud_list).size)return bud_list;
+	
+	klistheader_t* ret;
+	ret=(klistheader_t*)((long int)bud_list-sizeof(klistheader_t*));
+	
+	kbuffer_t* tempbuffer;
+	kbuffer_t* tempbuffer0;
+	kbuffer_t* tempbuffer1;	
+	// dealing with the large block free list
+	tempbuffer=unlinkbuffer(bud_list);
+//	tempbuffer=(*bud_list).buffer;
+//	(*bud_list).buffer=(*tempbuffer).nextbuffer;
+	
+	// dealing with the small block free list
+	tempbuffer0=tempbuffer;
+	tempbuffer1=(kbuffer_t*)((long int)tempbuffer0 + (*ret).size);
+	
+	insertbuffer(ret, tempbuffer1);
+	insertbuffer(ret, tempbuffer0);
+//	(*tempbuffer0).nextbuffer=tempbuffer1;
+//	(*tempbuffer1).nextbuffer=
+	return ret;
+}
+
+void insertbuffer(klistheader_t* thefreelist, kbuffer_t* thebuffer){
+	kbuffer_t* temp;
+	temp=(*thefreelist).buffer;
+	(*thefreelist).buffer=thebuffer;
+	(*thebuffer).nextbuffer=temp;
+}
+
+kbuffer_t* unlinkbuffer(klistheader_t* thefreelist){
+	kbuffer_t* ret;
+	ret=(*thefreelist).buffer;
+	(*thefreelist).buffer=(*ret).nextbuffer;
+	return (kbuffer_t*)ret;
 }
 
 #endif // KMA_BUD
