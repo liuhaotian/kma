@@ -53,6 +53,8 @@
  *  structures and arrays, line everything up in neat columns.
  */
 
+#define PAGENUM 91
+
 typedef struct
 {
 	void* nextbuffer;
@@ -78,7 +80,7 @@ typedef struct
 	int				numpages;//from 0 to max, the 1st one is 0
 	int				numalloc;// 0 means nothing//each page hold one , if 0 then free
 	klistheader_t	freelist[10];
-	kpageheader_t	page[100];
+	kpageheader_t	page[PAGENUM];
 	void*	nextmainpage;
 } kmainheader_t;
 
@@ -111,7 +113,9 @@ kma_malloc(kma_size_t size)
 		mainpage=initial_mainheader(get_page());
 	}
 	
-	int roundsize=roundup(size),i;
+	int roundsize=roundup(size);
+	int i;
+	void* ret;
 
 
 	// if there is not enough page, we create one, the the freelist will be available
@@ -122,7 +126,15 @@ kma_malloc(kma_size_t size)
 	}
 	else{
 		kpageheader_t* newpage=chkfreepage();// so we have the newpage. and it is available it freelist[9]
-		
+		if(roundsize==8192){
+			ret=unlinkbuffer(&((*mainpage).freelist[9]));
+			(*mainpage).numalloc++;
+			// change bit map
+			return (void*)ret;
+		}
+		while(0){
+			//divi_bud(klistheader_t* bud_list, kma_size_t bud_size);
+		}
 		
 		// divide the availalbe freelist to fit
 		/*
@@ -212,7 +224,7 @@ kmainheader_t* initial_mainheader(kpage_t* newpage){
 		(*ret).freelist[i].size=16<<i;
 		(*ret).freelist[i].buffer=0;
 	}
-	for(i = 0; i < 100; ++i)
+	for(i = 0; i < PAGENUM; ++i)
 	{
 		(*ret).page[i].ptr=0;
 		//initial_pageheader(&((*ret).page[i]));
@@ -223,7 +235,7 @@ kmainheader_t* initial_mainheader(kpage_t* newpage){
 void initial_pageheader(kpageheader_t* pageheader, kpage_t* newpage){
 	int j;
 	(*pageheader).ptr=newpage;
-	(*pageheader).addr=(kmainheader_t*)(newpage->ptr);
+	(*pageheader).addr=(void*)(newpage->ptr);
 	(*pageheader).numalloc=0;
 	for(j = 0; j < 64; ++j)
 	{
@@ -266,7 +278,7 @@ kpageheader_t* chkfreepage(){
 	
 	// find the available page header
 	while(1){
-		for(i = 0; i < 100; ++i)
+		for(i = 0; i < PAGENUM; ++i)
 		{
 			if((*temppage).page[i].ptr==0){
 				ret=&((*temppage).page[i]);
@@ -280,12 +292,14 @@ kpageheader_t* chkfreepage(){
 	if(ret!=0)
 	{
 		initial_pageheader(ret, get_page());
+		(*mainpage).numpages++;
 	}
 	else{
 		(*temppage).nextmainpage=initial_mainheader(get_page());
 		temppage=(*temppage).nextmainpage;
 		ret=&((*temppage).page[0]);
 		initial_pageheader(ret, get_page());
+		(*mainpage).numpages++;
 	}
 	
 	return ret;
