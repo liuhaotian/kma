@@ -98,6 +98,7 @@ kpageheader_t* chkfreepage();
 klistheader_t* divi_bud(klistheader_t* bud_list, kma_size_t bud_size);
 void insertbuffer(klistheader_t* thefreelist, kbuffer_t* thebuffer);
 kbuffer_t* unlinkbuffer(klistheader_t* thefreelist);
+void fillbitmap(kpageheader_t* pageheader, void* bufferptr, kma_size_t roundsize);
 	
 /************External Declaration*****************************************/
 
@@ -117,25 +118,65 @@ kma_malloc(kma_size_t size)
 	int i;
 	void* ret;
 
-
 	// if there is not enough page, we create one, the the freelist will be available
-	
 	
 	if((i=chkfreelist(size))){
 		i--;
+		klistheader_t* thelist;
+		kpageheader_t* thepage=0;
+		
+		thelist = divi_bud(&((*mainpage).freelist[i]), roundsize);
+		ret = unlinkbuffer(thelist);
+		
+		void* theaddr;
+		theaddr=(void*)(((long int)(((long int)ret-(long int)mainpage)/PAGESIZE))*PAGESIZE+(long int)mainpage);
+		kmainheader_t* temppage=mainpage;
+		// find the page header
+		while(!thepage){
+			for(i = 0; i < PAGENUM; ++i)
+			{
+				if((*temppage).page[i].addr==theaddr){
+					thepage=&((*temppage).page[i]);
+					break;
+				}
+			}
+			if((*temppage).nextmainpage==0)break;// it should find the page
+			temppage=(*temppage).nextmainpage;
+		}
+		fillbitmap(thepage, ret, roundsize);
+
+		(*mainpage).numalloc++;
+		(*thepage).numalloc++;
+		return (void*)ret;		
 	}
 	else{
 		kpageheader_t* newpage=chkfreepage();// so we have the newpage. and it is available it freelist[9]
+		klistheader_t* thelist;
+		
+		thelist=divi_bud(&((*mainpage).freelist[9]), roundsize);
+		ret=unlinkbuffer(thelist);
+		fillbitmap(newpage, ret, roundsize);
+
+		(*mainpage).numalloc++;
+		(*newpage).numalloc++;
+		return (void*)ret;
+		
+		/*
 		if(roundsize==8192){
 			ret=unlinkbuffer(&((*mainpage).freelist[9]));
 			(*mainpage).numalloc++;
-			// change bit map
+			fillbitmap(newpage, ret, roundsize);
 			return (void*)ret;
+		}
+		for(i = 9; i>=0 ; --i)
+		{
+			if((*mainpage).freelist[i].size==roundsize)break;
+			divi_bud(&((*mainpage).freelist[i]), roundsize);
 		}
 		while(0){
 			//divi_bud(klistheader_t* bud_list, kma_size_t bud_size);
 		}
-		
+		*/
 		// divide the availalbe freelist to fit
 		/*
 		we need to return a new page header, no matter it is already exits in the mainpage chain, or it is just created from a newly mainpage chain
@@ -242,6 +283,7 @@ void initial_pageheader(kpageheader_t* pageheader, kpage_t* newpage){
 		(*pageheader).bitmap[j]=0;
 	}
 	// add the whole page to free list
+	*((kbuffer_t**)((*pageheader).addr))=0;
 	insertbuffer(&((*mainpage).freelist[9]), (kbuffer_t*)((*pageheader).addr));
 /*	kbuffer_t* tempbuffer;
 	tempbuffer=(*mainpage).freelist[9].buffer;
@@ -306,27 +348,23 @@ kpageheader_t* chkfreepage(){
 }
 
 klistheader_t* divi_bud(klistheader_t* bud_list, kma_size_t bud_size){
-	if(bud_size==(*bud_list).size)return bud_list;
+	if(bud_size==((*bud_list).size))return bud_list;
 	
 	klistheader_t* ret;
-	ret=(klistheader_t*)((long int)bud_list-sizeof(klistheader_t*));
+	ret=(klistheader_t*)((long int)bud_list-sizeof(klistheader_t));
 	
 	kbuffer_t* tempbuffer;
 	kbuffer_t* tempbuffer0;
 	kbuffer_t* tempbuffer1;	
 	// dealing with the large block free list
 	tempbuffer=unlinkbuffer(bud_list);
-//	tempbuffer=(*bud_list).buffer;
-//	(*bud_list).buffer=(*tempbuffer).nextbuffer;
-	
 	// dealing with the small block free list
 	tempbuffer0=tempbuffer;
 	tempbuffer1=(kbuffer_t*)((long int)tempbuffer0 + (*ret).size);
-	
 	insertbuffer(ret, tempbuffer1);
 	insertbuffer(ret, tempbuffer0);
-//	(*tempbuffer0).nextbuffer=tempbuffer1;
-//	(*tempbuffer1).nextbuffer=
+
+	if(bud_size < (*ret).size)ret=divi_bud(ret, bud_size);
 	return ret;
 }
 
@@ -342,6 +380,20 @@ kbuffer_t* unlinkbuffer(klistheader_t* thefreelist){
 	ret=(*thefreelist).buffer;
 	(*thefreelist).buffer=(*ret).nextbuffer;
 	return (kbuffer_t*)ret;
+}
+
+void fillbitmap(kpageheader_t* pageheader, void* bufferptr, kma_size_t roundsize){
+	unsigned char* bitmap=(*pageheader).bitmap;
+	int i, offset, endbit;
+	offset=(int)(bufferptr-(*pageheader).addr);
+	endbit = offset + roundsize;
+	offset /= 16;
+	endbit /= 16;
+	
+	for( i = offset; i < endbit; ++i)
+	{
+		bitmap[i/8] |= (1<<(i%8));
+	}
 }
 
 #endif // KMA_BUD
