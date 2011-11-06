@@ -123,7 +123,6 @@ kma_malloc(kma_size_t size)
 
 	// if there is not enough page, we create one, the the freelist will be available
 	
-	printf("%d\n",size);
 	if((i=chkfreelist(size))){
 		i--;
 		klistheader_t* thelist;
@@ -145,6 +144,7 @@ kma_malloc(kma_size_t size)
 				}
 			}
 			if((*temppage).nextmainpage==0)break;// it should find the page
+			if(thepage)break;
 			temppage=(*temppage).nextmainpage;
 		}
 		fillbitmap(thepage, ret, roundsize);
@@ -177,21 +177,21 @@ kma_free(void* ptr, kma_size_t size)
 	kpageheader_t* thepage=0;
 	klistheader_t* thelist=0;
 	void* theaddr;
-	int i,pageindex;
+	int i;
 	theaddr=(void*)(((long int)(((long int)ptr-(long int)mainpage)/PAGESIZE))*PAGESIZE+(long int)mainpage);
 	kmainheader_t* temppage=mainpage;
-	kmainheader_t* previouspage;
+	kmainheader_t* previouspage=0;
 	// find the page header
 	while(!thepage){
 		for(i = 0; i < PAGENUM; ++i)
 		{
 			if((*temppage).page[i].addr==theaddr){
 				thepage=&((*temppage).page[i]);
-				pageindex=i;
 				break;
 			}
 		}
 		if((*temppage).nextmainpage==0)break;// it should find the page
+		if(thepage)break;
 		previouspage=temppage;
 		temppage=(*temppage).nextmainpage;
 	}
@@ -209,24 +209,27 @@ kma_free(void* ptr, kma_size_t size)
 	(*thepage).numalloc--;
 	
 	
-	klistheader_t* otherlist=combi_bud(&((*mainpage).freelist[i]), thepage);
-	if((*otherlist).size==8192){//the page is empty
+	klistheader_t* otherlist=combi_bud(thelist, thepage);
+//	if((*otherlist).size==8192){//the page is empty
+	if((*thepage).numalloc==0){
+		unlinkbuffer(otherlist);
 		free_page((*thepage).ptr);
 		(*thepage).ptr=0;
-		
-		for(i = 0; i < PAGENUM; ++i)
-		{
-			if((*temppage).page[i].ptr!=0){
-				break;
-			}
-		}
-		
-		if(i==PAGENUM){// all the page in the main temppage is free, we need to 
-			(*previouspage).nextmainpage=(*temppage).nextmainpage;
-			free_page((*temppage).itself);
-		}
-		
+		(*thepage).addr=0;
+		(*mainpage).numpages--;
+		(*temppage).numpages--;
 	}
+	if(((*temppage).numpages==0)&&(previouspage!=0))
+	{
+		(*previouspage).nextmainpage=(*temppage).nextmainpage;
+		free_page((*temppage).itself);
+	}
+	if(((*mainpage).numpages==0)&&(mainpage==temppage))
+	{
+		free_page((*mainpage).itself);
+		mainpage=0;
+	}
+	
 	
 	/*
 	free it
@@ -271,6 +274,7 @@ kmainheader_t* initial_mainheader(kpage_t* newpage){
 	for(i = 0; i < PAGENUM; ++i)
 	{
 		(*ret).page[i].ptr=0;
+		(*ret).page[i].addr=0;
 		//initial_pageheader(&((*ret).page[i]));
 	}
 	return ret;
@@ -317,12 +321,12 @@ int chkfreelist(kma_size_t size){
 }
 
 kpageheader_t* chkfreepage(){
-	kpageheader_t* ret;
+	kpageheader_t* ret=0;
 	kmainheader_t* temppage=mainpage;
 	int i;
 	
 	// find the available page header
-	while(1){
+	while(!ret){
 		for(i = 0; i < PAGENUM; ++i)
 		{
 			if((*temppage).page[i].ptr==0){
@@ -331,6 +335,7 @@ kpageheader_t* chkfreepage(){
 			}
 		}
 		if((*temppage).nextmainpage==0)break;
+		if(ret)break;
 		temppage=(*temppage).nextmainpage;
 	}
 	
@@ -338,6 +343,7 @@ kpageheader_t* chkfreepage(){
 	{
 		initial_pageheader(ret, get_page());
 		(*mainpage).numpages++;
+		(*temppage).numpages++;
 	}
 	else{
 		(*temppage).nextmainpage=initial_mainheader(get_page());
@@ -345,6 +351,7 @@ kpageheader_t* chkfreepage(){
 		ret=&((*temppage).page[0]);
 		initial_pageheader(ret, get_page());
 		(*mainpage).numpages++;
+		(*temppage).numpages++;
 	}
 	
 	return ret;
@@ -480,7 +487,6 @@ void emptybitmap(kpageheader_t* pageheader, void* bufferptr, kma_size_t roundsiz
 	endbit = offset + roundsize;
 	offset /= 16;
 	endbit /= 16;
-	
 	for( i = offset; i < endbit; ++i)
 	{
 		bitmap[i/8] &= (~(1<<(i%8)));
