@@ -224,8 +224,19 @@ kma_free(void* ptr, kma_size_t size)
 		(*previouspage).nextmainpage=(*temppage).nextmainpage;
 		free_page((*temppage).itself);
 	}
-	if(((*mainpage).numpages==0)&&(mainpage==temppage))
+	if((*mainpage).numpages==0)
 	{
+		while(1){
+			for(i = 0; i < PAGENUM; ++i)
+			{
+				if((*temppage).page[i].addr){
+					printf("the page nor free\n");
+				}
+			}
+			if((*temppage).nextmainpage==0)break;
+			previouspage=temppage;
+			temppage=(*temppage).nextmainpage;
+		}
 		free_page((*mainpage).itself);
 		mainpage=0;
 	}
