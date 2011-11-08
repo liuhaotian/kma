@@ -54,6 +54,40 @@
  *  structures and arrays, line everything up in neat columns.
  */
 
+#define PAGENUM 91
+
+typedef struct
+{
+	void* 	nextbuffer;
+	void* 	prevbuffer;
+	int		local;// 	1 means  yes local, 0 means global
+} kbuffer_t;
+
+typedef struct
+{
+	int 		size;
+	int			slack;
+	kbuffer_t* 	buffer;//point to the available one or nothing
+} klistheader_t;
+
+typedef struct
+{
+	kpage_t*		ptr;// the origin res return by get page(), we need to free it
+	void*			addr;//the ptr.ptr, the start addr of the page
+	unsigned char	bitmap[64];// bit map, shows that the resource 
+	int				numalloc;
+} kpageheader_t;
+
+typedef struct
+{
+	kpage_t*		itself;
+	int				numpages;//from 0 to max, the 1st one is 0
+	int				numalloc;// 0 means nothing//each page hold one , if 0 then free
+	klistheader_t	freelist[10];
+	kpageheader_t	page[PAGENUM];
+	void*	nextmainpage;
+} kmainheader_t;
+
 /************Global Variables*********************************************/
 
 /************Function Prototypes******************************************/
@@ -65,6 +99,7 @@
 void*
 kma_malloc(kma_size_t size)
 {
+	
   return NULL;
 }
 
