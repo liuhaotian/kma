@@ -207,7 +207,7 @@ kma_free(void* ptr, kma_size_t size)
 	}
 	thelist=&((*mainpage).freelist[i]);
 	insertbuffer(thelist, ptr);
-	emptybitmap(thepage, ptr, roundsize);
+	if(roundsize!=8192)emptybitmap(thepage, ptr, roundsize);
 	(*mainpage).numalloc--;
 	(*thepage).numalloc--;
 
