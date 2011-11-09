@@ -162,7 +162,7 @@ kma_malloc(kma_size_t size)
 
 		thelist=divi_bud(&((*mainpage).freelist[9]), roundsize);
 		ret=unlinkbuffer(thelist);
-		fillbitmap(newpage, ret, roundsize);
+		if(roundsize!=8192)fillbitmap(newpage, ret, roundsize);
 
 		(*mainpage).numalloc++;
 		(*newpage).numalloc++;
