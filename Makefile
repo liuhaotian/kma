@@ -73,6 +73,9 @@ kma_bud: ${SRCS}
 kma_lzbud: ${SRCS}
 	${CC} ${CFLAGS} -DKMA_LZBUD -o $@ ${SRCS}
 
+kma_fun: ${SRCS}
+	${CC} ${CFLAGS} -DKMA_FUN -o $@ ${SRCS}
+
 leak: $(TARGET)
 	for exec in ${PROGS}; do \
 		echo "Checking $${exec} (press ENTER to start)";\
