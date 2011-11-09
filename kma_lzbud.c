@@ -59,6 +59,7 @@
 typedef struct
 {
 	void* 	nextbuffer;
+	int		size;
 	int		local;// 	1 means  yes local, 0 means global
 } kbuffer_t;
 
@@ -81,7 +82,7 @@ typedef struct
 {
 	kpage_t*		itself;
 	int				numpages;//from 0 to max, the 1st one is 0
-	int				numalloc;// 0 means nothing//each page hold one , if 0 then free
+	int				numalloc;// 0 means nothing//each page hold one , if 0 then free, for allocated and local free
 	klistheader_t	freelist[10];
 	kpageheader_t	page[PAGENUM];
 	void*	nextmainpage;
@@ -98,7 +99,7 @@ void initial_pageheader(kpageheader_t* pageheader, kpage_t* newpage);
 kma_size_t roundup(kma_size_t size);
 int chkfreelist(kma_size_t size);
 kpageheader_t* chkfreepage();
-klistheader_t* divi_bud(klistheader_t* bud_list, kma_size_t bud_size);
+klistheader_t* divi_bud(kpageheader_t* bud_page, klistheader_t* bud_list, kma_size_t bud_size);
 klistheader_t* combi_bud(void* bud_ptr, klistheader_t* bud_list, kpageheader_t* bud_page);
 void insertbuffer(klistheader_t* thefreelist, kbuffer_t* thebuffer);
 kbuffer_t* unlinkbuffer(klistheader_t* thefreelist);
@@ -122,20 +123,16 @@ kma_malloc(kma_size_t size)
 
 	int roundsize=roundup(size);
 	int i;
-	void* ret;
+	kbuffer_t* ret;
 
 	// if there is not enough page, we create one, the the freelist will be available
-
 	if((i=chkfreelist(size))){
 		i--;
-		klistheader_t* thelist;
+		klistheader_t* thelist=&((*mainpage).freelist[i]);
 		kpageheader_t* thepage=0;
-
-		thelist = divi_bud(&((*mainpage).freelist[i]), roundsize);
-		ret = unlinkbuffer(thelist);
-
+		
 		void* theaddr;
-		theaddr=(void*)(((long int)(((long int)ret-(long int)mainpage)/PAGESIZE))*PAGESIZE+(long int)mainpage);
+		theaddr=(void*)(((long int)(((long int)(((*mainpage).freelist[i]).buffer)-(long int)mainpage)/PAGESIZE))*PAGESIZE+(long int)mainpage);
 		kmainheader_t* temppage=mainpage;
 		// find the page header
 		while(!thepage){
@@ -150,22 +147,43 @@ kma_malloc(kma_size_t size)
 			if(thepage)break;
 			temppage=(*temppage).nextmainpage;
 		}
+
+		thelist = divi_bud(thepage, thelist, roundsize);
+		ret = unlinkbuffer(thelist);
+		
+		
 		fillbitmap(thepage, ret, roundsize);
 
-		(*mainpage).numalloc++;
-		(*thepage).numalloc++;
+		if((*ret).local == 1)
+		{
+			(*thelist).slack = (*thelist).slack + 2;
+		}
+		else{
+			(*thelist).slack++;
+			(*mainpage).numalloc++;
+			(*thepage).numalloc++;
+		}
+		
 		return (void*)ret;		
 	}
 	else{
 		kpageheader_t* newpage=chkfreepage();// so we have the newpage. and it is available it freelist[9]
 		klistheader_t* thelist;
 
-		thelist=divi_bud(&((*mainpage).freelist[9]), roundsize);
+		thelist=divi_bud(newpage ,&((*mainpage).freelist[9]), roundsize);
 		ret=unlinkbuffer(thelist);
 		fillbitmap(newpage, ret, roundsize);
 
-		(*mainpage).numalloc++;
-		(*newpage).numalloc++;
+		if((*ret).local == 1)// it must be global free, but we keep this structure
+		{
+			(*thelist).slack = (*thelist).slack + 2;
+		}
+		else{
+			(*thelist).slack++;
+			(*mainpage).numalloc++;
+			(*newpage).numalloc++;
+		}
+
 		return (void*)ret;
 	}
   return NULL;
@@ -207,6 +225,127 @@ kma_free(void* ptr, kma_size_t size)
 	}
 	thelist=&((*mainpage).freelist[i]);
 	insertbuffer(thelist, ptr);
+	(*((kbuffer_t*)ptr)).size=roundsize;
+	
+	klistheader_t* otherlist;
+	if((*thelist).slack>=2)
+	{
+		(*((kbuffer_t*)ptr)).local=1;
+		(*thelist).slack=(*thelist).slack-2;
+		// do nothing
+	}
+	else if((*thelist).slack==1)
+	{
+		(*((kbuffer_t*)ptr)).local=0;
+		emptybitmap(thepage, ptr, roundsize);
+		(*thelist).slack=0;
+		(*mainpage).numalloc--;
+		(*thepage).numalloc--;
+		otherlist=combi_bud(ptr, thelist, thepage);
+		
+		if((*thepage).numalloc==0){
+			unlinkbufaddr(&((*mainpage).freelist[9]), (*thepage).addr);
+			free_page((*thepage).ptr);
+			(*thepage).ptr=0;
+			(*thepage).addr=0;
+			(*mainpage).numpages--;
+			(*temppage).numpages--;
+		}
+	}
+	else
+	{
+		(*((kbuffer_t*)ptr)).local=0;
+		emptybitmap(thepage, ptr, roundsize);
+		(*thelist).slack=0;
+		(*mainpage).numalloc--;
+		(*thepage).numalloc--;
+		otherlist=combi_bud(ptr, thelist, thepage);
+		
+		if((*thepage).numalloc==0){
+			unlinkbufaddr(&((*mainpage).freelist[9]), (*thepage).addr);
+			free_page((*thepage).ptr);
+			(*thepage).ptr=0;
+			(*thepage).addr=0;
+			(*mainpage).numpages--;
+			(*temppage).numpages--;
+		}
+
+
+		kpageheader_t* thatpage=0;
+		kmainheader_t* thattemppage=mainpage;
+		kmainheader_t* thatpreviouspage=0;
+		klistheader_t* thatlist=thelist;
+		kbuffer_t* thatptr;
+		kbuffer_t* tempptr;
+		tempptr=(kbuffer_t*)((*thatlist).buffer);
+		while(tempptr){
+			if((*tempptr).local==1){
+				thatptr=tempptr;
+			}
+			tempptr=(*tempptr).nextbuffer;
+		}
+		
+		if(thatptr==0){;}
+		else{
+			theaddr=(void*)(((long int)(((long int)thatptr-(long int)mainpage)/PAGESIZE))*PAGESIZE+(long int)mainpage);
+			// find that page header
+			while(!thatpage){
+				for(i = 0; i < PAGENUM; ++i)
+				{
+					if((*thattemppage).page[i].addr==theaddr){
+						thatpage=&((*thattemppage).page[i]);
+						break;
+					}
+				}
+				if((*thattemppage).nextmainpage==0)break;// it should find the page
+				if(thatpage)break;
+				thatpreviouspage=thattemppage;
+				thattemppage=(*thattemppage).nextmainpage;
+			}
+			//unlinkbufaddr(thatlist, thatptr);// it is already a free block
+			(*thatptr).local=0;
+			(*thatlist).slack=0;
+			//insertbuffer(thatlist, thatptr);
+			(*thatptr).size=(*thatlist).size;
+			emptybitmap(thatpage, thatptr, (*thatptr).size);
+			(*mainpage).numalloc--;
+			(*thatpage).numalloc--;
+			combi_bud(thatptr, thatlist, thatpage);
+			
+			if((*thatpage).numalloc==0){
+				unlinkbufaddr(&((*mainpage).freelist[9]), (*thatpage).addr);
+				free_page((*thatpage).ptr);
+				(*thatpage).ptr=0;
+				(*thatpage).addr=0;
+				(*mainpage).numpages--;
+				(*thattemppage).numpages--;
+			}
+		}
+		if(((*temppage).numpages==0)||((*thattemppage).numpages==0)){
+			temppage=mainpage;
+			previouspage=0;
+			while(temppage){
+				if(((*temppage).numpages==0)&&(previouspage!=0))
+				{
+					(*previouspage).nextmainpage=(*temppage).nextmainpage;
+					free_page((*temppage).itself);
+				}
+				else{
+					previouspage=temppage;
+				}
+				temppage=(*temppage).nextmainpage;
+			}
+			if((*mainpage).numpages==0)
+			{
+				free_page((*mainpage).itself);
+				mainpage=0;
+			}
+		}
+
+	}
+	
+/*
+	(*ptr).local
 	emptybitmap(thepage, ptr, roundsize);
 	(*mainpage).numalloc--;
 	(*thepage).numalloc--;
@@ -232,6 +371,7 @@ kma_free(void* ptr, kma_size_t size)
 		free_page((*mainpage).itself);
 		mainpage=0;
 	}
+	*/
 }
 
 kmainheader_t* initial_mainheader(kpage_t* newpage){
@@ -271,6 +411,7 @@ void initial_pageheader(kpageheader_t* pageheader, kpage_t* newpage){
 	kbuffer_t* tempbuffer;
 	tempbuffer=(*pageheader).addr;
 	(*tempbuffer).local=0;
+	(*tempbuffer).size=8192;
 	insertbuffer(&((*mainpage).freelist[9]), tempbuffer);
 }
 
@@ -332,7 +473,7 @@ kpageheader_t* chkfreepage(){
 	return ret;
 }
 
-klistheader_t* divi_bud(klistheader_t* bud_list, kma_size_t bud_size){
+klistheader_t* divi_bud(kpageheader_t* bud_page, klistheader_t* bud_list, kma_size_t bud_size){
 	if(bud_size==((*bud_list).size))return bud_list;
 	
 	klistheader_t* ret;
@@ -347,17 +488,30 @@ klistheader_t* divi_bud(klistheader_t* bud_list, kma_size_t bud_size){
 	tempbuffer0=tempbuffer;
 	tempbuffer1=(kbuffer_t*)((long int)tempbuffer0 + (*ret).size);
 	
-	(*tempbuffer0).local=(*tempbuffer).local;
+	(*tempbuffer0).local=(*tempbuffer).local;//it is the same
+	(*tempbuffer0).size=(*ret).size;
 	(*tempbuffer1).local=(*tempbuffer).local;
+	(*tempbuffer1).size=(*ret).size;
+	
+	if((*tempbuffer).local == 1)
+	{
+		(*bud_list).slack = (*bud_list).slack + 1;//N=N-1, L=L-1
+		(*ret).slack = (*ret).slack - 2;// N=N+2, L=L+2  so N-2L-G  -2
+		(*bud_page).numalloc++;
+	}
+	else{
+		//(*bud_list).slack++;
+		//(*ret).slack = (*ret).slack;//no change
+	}
 	
 	insertbuffer(ret, tempbuffer1);
 	insertbuffer(ret, tempbuffer0);
 
-	if(bud_size < (*ret).size)ret=divi_bud(ret, bud_size);
+	if(bud_size < (*ret).size)ret=divi_bud(bud_page, ret, bud_size);
 	return ret;
 }
 
-klistheader_t* combi_bud(void* bud_ptr, klistheader_t* bud_list, kpageheader_t* bud_page){
+klistheader_t* combi_bud(void* bud_ptr, klistheader_t* bud_list, kpageheader_t* bud_page){// we only accept global free blocks, so nothing changes.
 	if(8192==((*bud_list).size))return bud_list;
 	
 	klistheader_t* ret;
@@ -407,6 +561,8 @@ klistheader_t* combi_bud(void* bud_ptr, klistheader_t* bud_list, kpageheader_t* 
 	tempbuffer0=unlinkbufaddr(bud_list,tempbuffer0);
 	tempbuffer=tempbuffer0;
 	insertbuffer(ret, tempbuffer);
+	
+	(*tempbuffer).size=(*ret).size;
 
 	if(bud_size < 8192)ret=combi_bud(tempbuffer, ret, bud_page);
 	return ret;
