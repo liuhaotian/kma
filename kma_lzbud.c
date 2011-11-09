@@ -251,6 +251,27 @@ kma_free(void* ptr, kma_size_t size)
 			(*mainpage).numpages--;
 			(*temppage).numpages--;
 		}
+		
+		if((*temppage).numpages==0){
+			temppage=mainpage;
+			previouspage=0;
+			while(temppage){
+				if(((*temppage).numpages==0)&&(previouspage!=0))
+				{
+					(*previouspage).nextmainpage=(*temppage).nextmainpage;
+					free_page((*temppage).itself);
+				}
+				else{
+					previouspage=temppage;
+				}
+				temppage=(*temppage).nextmainpage;
+			}
+			if((*mainpage).numpages==0)
+			{
+				free_page((*mainpage).itself);
+				mainpage=0;
+			}
+		}
 	}
 	else
 	{
@@ -275,7 +296,7 @@ kma_free(void* ptr, kma_size_t size)
 		kmainheader_t* thattemppage=mainpage;
 		kmainheader_t* thatpreviouspage=0;
 		klistheader_t* thatlist=thelist;
-		kbuffer_t* thatptr;
+		kbuffer_t* thatptr=0;
 		kbuffer_t* tempptr;
 		tempptr=(kbuffer_t*)((*thatlist).buffer);
 		while(tempptr){
