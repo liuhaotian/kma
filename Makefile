@@ -27,8 +27,8 @@ COMPRESS = gzip
 CFLAGS = -g -Wall -O2 -D_GNU_SOURCE -lm
 
 DELIVERY = Makefile *.h *.c DOC
-PROGS = kma_dummy kma_rm kma_p2fl kma_mck2 kma_bud kma_lzbud
-SRCS = kma.c kpage.c kma_dummy.c kma_rm.c kma_p2fl.c kma_mck2.c kma_bud.c kma_lzbud.c
+PROGS = kma_dummy kma_rm kma_p2fl kma_mck2 kma_bud kma_lzbud kma_fun
+SRCS = kma.c kpage.c kma_dummy.c kma_rm.c kma_p2fl.c kma_mck2.c kma_bud.c kma_lzbud.c kma_fun.c
 OBJS = ${SRCS:.c=.o}
 
 all: ${PROGS} competition
