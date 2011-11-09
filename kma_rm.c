@@ -62,10 +62,10 @@ typedef struct
 
 typedef struct
 {
-	void* itself;
-	int numpages; // from 0 to max, 1st page is 0
-	int numalloc; // if 0 then we can free page, number of allocated blocks per page
-	void* freememory;
+	//void* itself;
+	//int numpages; // from 0 to max, 1st page is 0
+	//int numalloc; // if 0 then we can free page, number of allocated blocks per page
+	//void* freememory;
 	kfreelist_t* header; // pointer to header of free list
 } klistheader_t;
 
@@ -76,7 +76,7 @@ kpage_t* gentryptr=0; // our global entry pointer
 
 /************Function Prototypes******************************************/
 
-kpage_t* initial(kpage_t* plage, int first); // function to initialize page
+kpage_t* initial(kpage_t* page, int first); // function to initialize page
 void* findfit(int size); // returns pointer to free space based on our list, and fixes the list
 void add(void* ptr, int size); // adds pointer to free space based on our list
 void resolve(void); // resolves list, looking for pages being used with no allocs and freeing them
@@ -97,12 +97,12 @@ kma_malloc(kma_size_t size)
 
 	// initializations for malloc stack vars
 	void* ret;
-	klistheader_t* mainpage;
+	//klistheader_t* mainpage;
 
 	if (!gentryptr) // initialize the first page if we have no entry pointer and set it to it
 		initial(get_page(), 1);
 
-	mainpage = (klistheader_t*)(gentryptr->ptr); // set our mainpage listheader struct before looking for first fit
+	//mainpage = (klistheader_t*)(gentryptr->ptr); // set our mainpage listheader struct before looking for first fit
 
 	// Now we call our findfit function that will search list and return ptr to freelist struct that fits, if not in list it will also make a new page and add a new freelist struct and return that. In addition, it will do some tricks to save some space
 	ret = findfit(size);
@@ -126,79 +126,97 @@ kpage_t* initial(kpage_t* page, int first)
 	klistheader_t* listheader;
 	*((kpage_t**)page->ptr) = page;
 
-	listheader=(klistheader_t*)(page->ptr); // set out listheader to the base of the page
+	listheader=(klistheader_t*)(page->ptr); // set our listheader to the base of the page
 
 	/*kfreelist_t* firstresource; // initialize the first resource
-	firstresource->size = (PAGESIZE - sizeof(klistheader_t)); // how much space we will have
+        firstresource->size = (PAGESIZE - sizeof(klistheader_t)); // how much space we will have
 	firstresource->nextbuffer = NULL; // end of our free list for now
 	firstresource->prevbuffer = NULL; // beginning of free list */
 
 	// Add first free resource to list
-	listheader->header = (kfreelist_t*)(listheader + sizeof(klistheader_t)); // set our header to right after the initial data struct
-	
+	listheader->header = (kfreelist_t*)((long int)listheader + sizeof(klistheader_t)); // set our header to right after the initial data struct
+
 	if (first)
+	{
 	  gentryptr = page;
+	}
 	
 	// Add new resource which is the full page to the linked list
-	add( ((void*)(listheader + sizeof(klistheader_t))), (PAGESIZE - sizeof(klistheader_t)));
+	add( ((void*)(listheader->header)), (PAGESIZE - sizeof(klistheader_t)));
 
-	(*listheader).numpages = 0;
-	(*listheader).numalloc = 0;
-	(*listheader).freememory = (void*)((long int)listheader + sizeof(klistheader_t));
+	//(*listheader).numpages = 0;
+	//(*listheader).numalloc = 0;
+	//(*listheader).freememory = (void*)((long int)listheader + sizeof(klistheader_t));
 	
 	return page;
 }
 
 void* findfit(int size)
 {
+	if (size < sizeof(kfreelist_t))
+		size = sizeof(kfreelist_t); // minimum size allowed for free resource
   klistheader_t* mainpage;
   mainpage = (klistheader_t*)(gentryptr->ptr);
   kfreelist_t* temp = ((kfreelist_t*)(mainpage->header));
+	int blocksize;
   
   while (temp != NULL)
   {
-    if (temp->size >= size) // found our fit
+		blocksize = temp->size;
+    if (blocksize >= size) // found our fit
     {
-      if (temp->size <= (size + sizeof(kfreelist_t))) // perfect fit, remove whole thing from free resource list
+      if (blocksize == size || (blocksize - size) < sizeof(kfreelist_t) ) // perfect fit or not enough space to perserve, remove whole thing from free resource list
       {
-	remove(temp);
-	return (((void*)(temp)) + sizeof(kfreelist_t));
+				remove(temp);
+				return ((void*)temp);
       }
-      
+
       // else, we have to save some free space and make a new entry in our list
-      add(temp + size, (temp->size - size));
-      
-      remove(temp);
-      return ((void*)(temp)) + sizeof(kfreelist_t);
-      
+      add((void*)((long int)temp + size), (blocksize - size));
+			remove(temp);
+      return ((void*)temp);  
     }
     temp = temp->nextbuffer; // continue on with list loop
   }
   
   // didn't find a fit, allocate a new page, call initial to initialize it and add it to free list, return it
   // then, return the new ptr after sectioning off additional space
-  kpage_t* newpage;
-  newpage = initial(get_page(), 0);
+  //kpage_t* newpage;
+  //newpage = initial(get_page(), 0);
+	initial(get_page(), 0);
+
+	return findfit(size);
   
-  ((kfreelist_t*)(newpage + sizeof(klistheader_t)))->size = size; // set the resource's size equal to our size
-  
-  add( ( ((kfreelist_t*)(newpage + sizeof(klistheader_t))) + size ), ( ((kfreelist_t*)(newpage + sizeof(klistheader_t)))->size - size ) ); 
-  return ((kfreelist_t*)(newpage + sizeof(klistheader_t)));  
+  // remove the new page's initial resource from free list since initial made it
+  //remove( ((kfreelist_t*)((newpage->ptr) + sizeof(klistheader_t))) );
+  //add( ( ((kfreelist_t*)((newpage->ptr) + sizeof(klistheader_t))) + size), ( (((kfreelist_t*)((newpage->ptr) + sizeof(klistheader_t)))->size) - size ) ); 
+  //return ((kfreelist_t*)((newpage->ptr) + sizeof(klistheader_t)));  
 }	
 
 void add(void* ptr, int size) // adds pointer to free space based on our list
 {
   klistheader_t* mainpage;
   mainpage = (klistheader_t*)(gentryptr->ptr);
-  ((kfreelist_t*)(mainpage->header))->prevbuffer = ptr; // change previous header's prevbuffer to new resource 
+	void* temp = (void*)(mainpage->header);
+	
+	// case 1: adding the first one
+	if (temp == ptr)
+	{
+		((kfreelist_t*)ptr)->size = size;
+		((kfreelist_t*)ptr)->prevbuffer = NULL;
+		((kfreelist_t*)ptr)->nextbuffer = NULL;
+		return;
+	}
+
+	// case 2: adding any others
+  ((kfreelist_t*)(mainpage->header))->prevbuffer = (kfreelist_t*)ptr; // change previous header's prevbuffer to new resource 
   
-  kfreelist_t* temp = (kfreelist_t*)ptr;
   // make the new header the ptr
-  temp->nextbuffer = ((kfreelist_t*)(mainpage->header));
+  ((kfreelist_t*)ptr)->nextbuffer = ((kfreelist_t*)(mainpage->header));
+  mainpage->header = (kfreelist_t*)ptr;
   
-  mainpage->header = temp; 
-  temp->size = size;
-  temp->prevbuffer = NULL;
+  ((kfreelist_t*)ptr)->size = size;
+  ((kfreelist_t*)ptr)->prevbuffer = NULL;
 }
 
 void resolve(void) // resolves list, looking for pages being used with no allocs and freeing them
@@ -208,36 +226,42 @@ void resolve(void) // resolves list, looking for pages being used with no allocs
 void remove(void* ptr) // removes pointer from list
 {
   //4 cases, removing head of list with more, head of list by itself, tail of list, or anywhere else
+
+	kfreelist_t* temp = (kfreelist_t*)ptr;
+	kfreelist_t* tempnext = temp->nextbuffer;
+	kfreelist_t* tempprev = temp->prevbuffer;
+
   // case 1: head by itself
-  if ( ((kfreelist_t*)ptr)->nextbuffer == NULL && ((kfreelist_t*)ptr)->prevbuffer == NULL)
+  if ( tempnext == NULL && tempprev == NULL)
   {
-    // get rid of page?
+    // get rid of all pages?
+		klistheader_t* mainpage = (klistheader_t*)(gentryptr->ptr);
+		mainpage->header = NULL;
     gentryptr = 0;
     return;
   }
     
   // case 2: head with more
-  if ( ((kfreelist_t*)ptr)->prevbuffer == NULL)
+  if ( tempprev == NULL)
   {
     klistheader_t* mainpage = (klistheader_t*)(gentryptr->ptr);
-    ((kfreelist_t*)(((kfreelist_t*)(mainpage->header))->nextbuffer))->prevbuffer = NULL;
+    tempnext->prevbuffer = NULL;
+		// and set new header
+		mainpage->header = tempnext;
     return;
   }
   
   // case 3: tail
-  if ( ((kfreelist_t*)ptr)->nextbuffer == NULL)
+  if ( tempnext == NULL)
   {
-    ((kfreelist_t*)(((kfreelist_t*)ptr)->prevbuffer))->nextbuffer = NULL;
+    tempprev->nextbuffer = NULL;
     return;
   }
-    
+  
   // case 4: anywhere else
-  else
-  {
-    ((kfreelist_t*)(((kfreelist_t*)ptr)->prevbuffer))->nextbuffer = ((kfreelist_t*)ptr)->nextbuffer;
-    ((kfreelist_t*)(((kfreelist_t*)ptr)->nextbuffer))->prevbuffer = ((kfreelist_t*)ptr)->prevbuffer;
-    return;
-  }
+  tempnext->prevbuffer = tempprev;
+	tempprev->nextbuffer = tempnext;
+  return;
 }
 
 #endif // KMA_RM
