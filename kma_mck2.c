@@ -54,7 +54,29 @@
  *  structures and arrays, line everything up in neat columns.
  */
 
+typedef struct
+{
+	void* 	nextbuffer;
+} kbuffer_t;
+
+typedef struct
+{
+	kbuffer_t* buffer;
+} klistheader_t;
+
+typedef struct
+{
+	void* itself;
+	int numpages;//from 0 to max, the 1st one is 0
+	int numalloc;// 0 means nothing//each page hold one , if 0 then free
+	int size;
+	int full;
+	klistheader_t p2fl[10];
+} kpageheader_t;
+
 /************Global Variables*********************************************/
+
+kpageheader_t* mainpage=0;
 
 /************Function Prototypes******************************************/
 
@@ -65,6 +87,7 @@
 void*
 kma_malloc(kma_size_t size)
 {
+	
   return NULL;
 }
 
