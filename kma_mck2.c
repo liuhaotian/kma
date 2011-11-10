@@ -140,6 +140,35 @@ kma_malloc(kma_size_t size)
 void
 kma_free(void* ptr, kma_size_t size)
 {
+	int roundsize=roundup(size);
+	int listindex=0;
+	while((16<<listindex)!=roundsize)
+	{
+		listindex++;
+	}
+	klistheader_t* thelist;
+	kpageheader_t* thepage;
+	thelist=&((*mainpage).p2fl[listindex]);
+	thepage=(kpageheader_t*)(((long int)(((long int)ptr-(long int)mainpage)/PAGESIZE))*PAGESIZE + (long int)mainpage);
+	
+	insertbuffer(thelist, (kbuffer_t*)ptr);
+	(*mainpage).numalloc--;
+	(*thepage).numalloc--;
+	
+	kpageheader_t* thelastpage;
+	thelastpage=(kpageheader_t*)((long int)mainpage + ((*mainpage).numpages) * PAGESIZE);
+	if(thepage==thelastpage)
+	{
+		while((*thelastpage).numalloc==0){
+			(*mainpage).numpages--;
+			free_page((*thelastpage).itself);
+			if(mainpage==thelastpage){
+				mainpage=0;
+				break;
+			}
+			thelastpage=(kpageheader_t*)((long int)mainpage + ((*mainpage).numpages) * PAGESIZE);
+		}
+	}
   ;
 }
 
