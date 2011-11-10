@@ -85,6 +85,8 @@ kpageheader_t* initpage(kpage_t* page, kma_size_t roundsize);
 void insertbuffer(klistheader_t* thefreelist, kbuffer_t* thebuffer);
 kbuffer_t* unlinkbuffer(klistheader_t* thefreelist);
 int chkfreelist(kma_size_t roundsize);// we should limite the boundare of the free list
+int chkemptypage();
+kbuffer_t* unlinkbufaddr(klistheader_t* thefreelist, kbuffer_t* thebufaddr);
 //kpageheader_t* chkfreepage();
 
 /************External Declaration*****************************************/
@@ -123,6 +125,17 @@ kma_malloc(kma_size_t size)
 		(*thepage).numalloc++;
 		return ret;
 	}
+	else if((i=chkemptypage())){
+		kpageheader_t* theexistpage;
+		theexistpage=(kpageheader_t*)((long int)mainpage + i * PAGESIZE);
+		theexistpage=initpage((*theexistpage).itself, roundsize);
+		
+		ret=unlinkbuffer(thelist);
+		(*mainpage).numalloc++;
+		(*theexistpage).numalloc++;
+		
+		return ret;
+	}
 	else
 	{
 		kpageheader_t* newpage=initpage(get_page(), roundsize);
@@ -154,6 +167,36 @@ kma_free(void* ptr, kma_size_t size)
 	insertbuffer(thelist, (kbuffer_t*)ptr);
 	(*mainpage).numalloc--;
 	(*thepage).numalloc--;
+	if((*thepage).numalloc==0){
+		(*thepage).full=0;
+		
+		if(roundsize==8192){
+			unlinkbufaddr(&((*mainpage).p2fl[9]), (kbuffer_t*)((long int)thepage + sizeof(kpageheader_t)));
+		}
+		else if(roundsize==4096){
+			unlinkbufaddr(&((*mainpage).p2fl[8]), (kbuffer_t*)((long int)thepage + sizeof(kpageheader_t)));
+		}
+		else{
+			kbuffer_t* startbuf;
+			kbuffer_t* endbuf;
+			kbuffer_t* tempbuf;
+			startbuf=(kbuffer_t*)((long int)thepage + sizeof(kpageheader_t));
+			endbuf=(kbuffer_t*)((long int)thepage + PAGESIZE - roundsize);
+			for(tempbuf = startbuf; tempbuf < endbuf; tempbuf = (kbuffer_t*)((long int)tempbuf + roundsize))
+			{
+				//(*tempbuf).nextbuffer = (void*)((long int)tempbuf + roundsize);
+			}
+			tempbuf = (kbuffer_t*)((long int)tempbuf - roundsize);//	back to the last one
+			//(*tempbuf).nextbuffer=0;
+			unlinkbufaddr(&((*mainpage).p2fl[listindex]), tempbuf);
+			(*startbuf).nextbuffer = (*tempbuf).nextbuffer;
+			unlinkbufaddr(&((*mainpage).p2fl[listindex]), startbuf);
+			//insertbuffer(&((*mainpage).p2fl[listindex]), tempbuf);// insert the last one
+			//insertbuffer(&((*mainpage).p2fl[listindex]), startbuf);//	insert the first one
+			//(*startbuf).nextbuffer = (void*)((long int)startbuf + roundsize);// so all the buffers are linked
+		}
+		
+	}
 	
 	kpageheader_t* thelastpage;
 	thelastpage=(kpageheader_t*)((long int)mainpage + ((*mainpage).numpages) * PAGESIZE);
@@ -227,7 +270,7 @@ kpageheader_t* initpage(kpage_t* page, kma_size_t roundsize){
 	(*ret).numpages=0;
 	(*ret).numalloc=0;
 	(*ret).size=roundsize;
-	//(*ret).full=0;
+	(*ret).full=1;
 	
 	if(roundsize==8192){
 		insertbuffer(&((*mainpage).p2fl[9]), (kbuffer_t*)((long int)ret + sizeof(kpageheader_t)));
@@ -275,6 +318,38 @@ int chkfreelist(kma_size_t roundsize){
 	
 	if((thebuffer != 0) && ((void*)thebuffer < (void*)endptr))return listindex+1;
 	return 0;
+}
+
+int chkemptypage(){
+	int ret;
+	kpageheader_t* temppage;
+	for(ret = 0; ret < (*mainpage).numpages; ++ret)
+	{
+		temppage=(kpageheader_t*)((long int)mainpage + ret * PAGESIZE);
+		if((*temppage).full==0)return ret;
+	}
+	return 0;
+}
+
+kbuffer_t* unlinkbufaddr(klistheader_t* thefreelist, kbuffer_t* thebufaddr){
+	kbuffer_t* ret = 0;
+	void* thenextbuffer;
+	thenextbuffer=(*thefreelist).buffer;
+	if(thebufaddr==thenextbuffer)
+	{
+		ret=thebufaddr;
+		(*thefreelist).buffer=(*ret).nextbuffer;
+		return ret;
+	}
+	while(thenextbuffer){
+		if((*(kbuffer_t*)thenextbuffer).nextbuffer==thebufaddr){// we find it!
+			ret=thebufaddr;
+			(*(kbuffer_t*)thenextbuffer).nextbuffer=(*ret).nextbuffer;
+			return ret;
+		}
+		thenextbuffer=(*(kbuffer_t*)thenextbuffer).nextbuffer;
+	}
+	return 0; // it should be free
 }
 
 #endif // KMA_MCK2
