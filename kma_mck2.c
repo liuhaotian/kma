@@ -100,7 +100,7 @@ kma_malloc(kma_size_t size)
 	if(!mainpage){// initialized the entry
 		mainpage=initpage(get_page(), 16);//	16 for the most used page
 	}
-	
+	//printf("%d\n",size);
 	int roundsize=roundup(size);
 	int i;
 	int listindex=0;
@@ -112,13 +112,13 @@ kma_malloc(kma_size_t size)
 	thelist=&((*mainpage).p2fl[listindex]);
 	
 	kbuffer_t* ret;
-	printf("%lx\n",(long int)thelist);
+	//printf("%lx\n",(long int)thelist);
 	if((i=chkfreelist(roundsize)))
 	{
 		kpageheader_t* thepage;
 		ret=unlinkbuffer(thelist);
 		
-		thepage=((long int)(((long int)ret-(long int)mainpage)/PAGESIZE))*PAGESIZE + mainpage;
+		thepage=(kpageheader_t*)(((long int)(((long int)ret-(long int)mainpage)/PAGESIZE))*PAGESIZE + (long int)mainpage);
 		(*mainpage).numalloc++;
 		(*thepage).numalloc++;
 		return ret;
@@ -212,11 +212,11 @@ kpageheader_t* initpage(kpage_t* page, kma_size_t roundsize){
 		kbuffer_t* tempbuf;
 		startbuf=(kbuffer_t*)((long int)ret + sizeof(kpageheader_t));
 		endbuf=(kbuffer_t*)((long int)ret + PAGESIZE - roundsize);
-		for(tempbuf = startbuf; tempbuf < endbuf; tempbuf += roundsize)
+		for(tempbuf = startbuf; tempbuf < endbuf; tempbuf = (kbuffer_t*)((long int)tempbuf + roundsize))
 		{
-			(*tempbuf).nextbuffer = tempbuf + roundsize;
+			(*tempbuf).nextbuffer = (void*)((long int)tempbuf + roundsize);
 		}
-		tempbuf -= roundsize;//	back to the last one
+		tempbuf = (kbuffer_t*)((long int)tempbuf - roundsize);//	back to the last one
 		(*tempbuf).nextbuffer=0;
 		int listindex=0;
 		while((16<<listindex)!=roundsize)
@@ -225,7 +225,7 @@ kpageheader_t* initpage(kpage_t* page, kma_size_t roundsize){
 		}
 		insertbuffer(&((*mainpage).p2fl[listindex]), tempbuf);// insert the last one
 		insertbuffer(&((*mainpage).p2fl[listindex]), startbuf);//	insert the first one
-		(*startbuf).nextbuffer = startbuf + roundsize;// so all the buffers are linked
+		(*startbuf).nextbuffer = (void*)((long int)startbuf + roundsize);// so all the buffers are linked
 	}
 	
 	return ret;
