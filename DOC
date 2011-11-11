@@ -46,7 +46,7 @@ TIME -> 0.14/0.06/0.06, 0.23/0.19/0.03, 0.91/0.73/0.09
 
 FUN (improvement on Lazy buddy system):	
 
-	This is for the competition. It comes from converting the bud to lzbud, and we improve the function by adding a free buffer to a free list in the order of address. Also, we make a improvement that when we free a 8192 byte block, there is no need to empty the bit map, so just free the page. As the 5.trace has a lot of requests for more than 4096 bytes-size blocks, this indeed improves the quickness.
+	This is for the competition. It comes from converting the bud to lzbud, and we improve the function by adding a free buffer to a free list in the order of address. Also, we make a improvement that when we free a 8192 byte block, there is no need to empty the bit map, so just free the page. As the 5.trace has a lot of requests for more than 4096 bytes-size blocks, this indeed improves the quickness. The mainpage can store 91 page info as in 64bit machine. Once we know that the competition is in a 32bit machine, we change it to 105 pages by change the #define NUMPAGES. The improvement from 64bit to 32bit is around 2%.
 
 Metrics
 MEMORY UTILIZATION -> 3, 43, 1374, 1244, 10090

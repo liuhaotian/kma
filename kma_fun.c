@@ -54,7 +54,8 @@
  *  structures and arrays, line everything up in neat columns.
  */
 
-#define PAGENUM 91
+//#define PAGENUM 91// works for 64bit machine
+#define PAGENUM 105// works for 32bit machine
 
 typedef struct
 {
