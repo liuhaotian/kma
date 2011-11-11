@@ -58,7 +58,7 @@ typedef struct
 	int size;
 	void* nextbuffer;
 	void* prevbuffer;
-	kpage_t* whichpage;
+	void* whichpage;
 } kfreelist_t;
 
 typedef struct
@@ -108,7 +108,11 @@ kma_malloc(kma_size_t size)
 	ret = findfit(size);
 
 	mainpage->numalloc++;
-	(((klistheader_t*)(((kfreelist_t*)ret)->whichpage))->numalloc)++; // increase number allocated on the page we added
+	
+	klistheader_t* thispage;
+
+	thispage=(*(kfreelist_t*)ret).whichpage;
+	((*thispage).numalloc)++; // increase number allocated on the page we added
 	return ret;
 	
 }
@@ -206,10 +210,12 @@ void add(void* ptr, int size) // adds pointer to free space based on our list
   mainpage = (klistheader_t*)(gentryptr->ptr);
 	void* temp = (void*)(mainpage->header);
 	
-	kpage_t* temppage;
+	klistheader_t* temppage;
+	kfreelist_t*	thisptr;
 	long int i = ((long int)ptr - (long int)mainpage) / PAGESIZE; // how far our page is by number of pages
-	temppage = (kpage_t*)((long int)mainpage + i * PAGESIZE); // the page we are adding a free resource to
-	((kfreelist_t*)ptr)->whichpage = temppage;
+	temppage = (klistheader_t*)((long int)mainpage + i * PAGESIZE); // the page we are adding a free resource to
+	thisptr = (kfreelist_t*)ptr;
+	(*thisptr).whichpage = temppage;
 	
 	
 	// case 1: adding the first one
@@ -260,14 +266,14 @@ void resolve(void) // resolves list, looking for pages being used with no allocs
 	klistheader_t* mainpage;
 	mainpage = (klistheader_t*)(gentryptr->ptr);
 	
-	kpage_t* temppage;
+	klistheader_t* temppage;
 	int i;
 	i = mainpage->numpages; // find the max page and go there first
 	int cont = 1;
 	do 
 	{
 		cont = 0;
-		temppage = (((kpage_t*)((long int)mainpage + i * PAGESIZE)));
+		temppage = (((klistheader_t*)((long int)mainpage + i * PAGESIZE)));
 		// if that page has no malloc's, then first loop through free list and remove each one with page ptr, then free the page
 		kfreelist_t* temp = mainpage->header;
 		kfreelist_t* temp2;
@@ -281,7 +287,7 @@ void resolve(void) // resolves list, looking for pages being used with no allocs
 				temp = temp2;
 			}
 			cont = 1; //could be more free pages in descending order from end, let it continue
-			if (((klistheader_t*)(temppage->ptr)) == mainpage)
+			if (temppage == mainpage)
 			{
 				gentryptr = 0;
 				cont = 0;
@@ -289,7 +295,7 @@ void resolve(void) // resolves list, looking for pages being used with no allocs
 			//((klistheader_t*)temppage)->itself = (void*)temppage;
 			//temppage->ptr = ((kpage_t*)((klistheader_t*)temppage)->itself);
 			
-			free_page(temppage);
+			free_page((*temppage).itself);
 			if (gentryptr)
 				(mainpage->numpages)--;
 			i--;
