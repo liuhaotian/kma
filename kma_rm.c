@@ -107,7 +107,7 @@ kma_malloc(kma_size_t size)
 	// Now we call our findfit function that will search list and return ptr to freelist struct that fits, if not in list it will also make a new page and add a new freelist struct and return that. In addition, it will do some tricks to save some space
 	ret = findfit(size);
 
-	mainpage->numalloc++;
+	//mainpage->numalloc++;
 	
 	klistheader_t* thispage;
 
@@ -121,7 +121,7 @@ void
 kma_free(void* ptr, kma_size_t size)
 {
 	// decrease number allocated
-	(((klistheader_t*)(gentryptr->ptr))->numalloc)--;
+	//(((klistheader_t*)(gentryptr->ptr))->numalloc)--;
 	
 	// function to add ptr with size to list
 	add(ptr, size);
@@ -181,7 +181,7 @@ void* findfit(int size)
       }
 
       // else, we have to save some free space and make a new entry in our list
-      add((void*)((long int)temp + size), (blocksize - size));
+			add((void*)((long int)temp + size), (blocksize - size));
 			remove(temp);
       return ((void*)temp);  
     }
@@ -216,26 +216,56 @@ void add(void* ptr, int size) // adds pointer to free space based on our list
 	temppage = (klistheader_t*)((long int)mainpage + i * PAGESIZE); // the page we are adding a free resource to
 	thisptr = (kfreelist_t*)ptr;
 	(*thisptr).whichpage = temppage;
-	
+
+	((kfreelist_t*)ptr)->size = size;
+	((kfreelist_t*)ptr)->prevbuffer = NULL;
 	
 	// case 1: adding the first one
 	if (temp == ptr)
 	{
-		((kfreelist_t*)ptr)->size = size;
-		((kfreelist_t*)ptr)->prevbuffer = NULL;
 		((kfreelist_t*)ptr)->nextbuffer = NULL;
 		return;
 	}
 
+	/* Add to beginning of list, bad algorithm leads to page limit problems
 	// case 2: adding any others
   ((kfreelist_t*)(mainpage->header))->prevbuffer = (kfreelist_t*)ptr; // change previous header's prevbuffer to new resource 
   
   // make the new header the ptr
   ((kfreelist_t*)ptr)->nextbuffer = ((kfreelist_t*)(mainpage->header));
-  mainpage->header = (kfreelist_t*)ptr;
-  
-  ((kfreelist_t*)ptr)->size = size;
-  ((kfreelist_t*)ptr)->prevbuffer = NULL;
+  mainpage->header = (kfreelist_t*)ptr; */
+
+
+	// Add to the free list in order of increasing ptr, so we will always start our search from front contiguously
+	// case 2: adding any others
+	if (temp > ptr) // if our new one comes before our header contiguously
+	{
+		((kfreelist_t*)(mainpage->header))->prevbuffer = (kfreelist_t*)ptr; // change prev header's prevbuffer to new
+		
+		// make the new header the ptr
+		((kfreelist_t*)ptr)->nextbuffer = ((kfreelist_t*)(mainpage->header));
+		mainpage->header = (kfreelist_t*)ptr;
+
+		return;
+	}
+
+	// else we need to find where to add by searching list and inserting between
+	kfreelist_t* tempnext;
+	while (((kfreelist_t*)temp)->nextbuffer)
+	{
+		if (temp > ptr)
+			break; // we found it, where ours needs to be inserted after
+
+		temp = ((void*)(((kfreelist_t*)temp)->nextbuffer));
+	}
+	tempnext = ((kfreelist_t*)temp)->nextbuffer;
+
+	((kfreelist_t*)temp)->nextbuffer = ptr;
+	((kfreelist_t*)ptr)->nextbuffer = tempnext;
+	((kfreelist_t*)ptr)->prevbuffer = temp;
+	if (tempnext)
+		tempnext->prevbuffer = ptr;
+	
 }
 
 void resolve(void) // resolves list, looking for pages being used with no allocs and freeing them
@@ -292,9 +322,7 @@ void resolve(void) // resolves list, looking for pages being used with no allocs
 				gentryptr = 0;
 				cont = 0;
 			}
-			//((klistheader_t*)temppage)->itself = (void*)temppage;
-			//temppage->ptr = ((kpage_t*)((klistheader_t*)temppage)->itself);
-			
+
 			free_page((*temppage).itself);
 			if (gentryptr)
 				(mainpage->numpages)--;
