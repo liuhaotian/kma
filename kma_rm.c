@@ -58,14 +58,14 @@ typedef struct
 	int size;
 	void* nextbuffer;
 	void* prevbuffer;
+	kpage_t* whichpage;
 } kfreelist_t;
 
 typedef struct
 {
-	//void* itself;
-	//int numpages; // from 0 to max, 1st page is 0
-	//int numalloc; // if 0 then we can free page, number of allocated blocks per page
-	//void* freememory;
+	void* itself;
+	int numpages; // from 0 to max, 1st page is 0
+	int numalloc; // if 0 then we can free page, number of allocated blocks per page
 	kfreelist_t* header; // pointer to header of free list
 } klistheader_t;
 
@@ -97,16 +97,18 @@ kma_malloc(kma_size_t size)
 
 	// initializations for malloc stack vars
 	void* ret;
-	//klistheader_t* mainpage;
+	klistheader_t* mainpage;
 
 	if (!gentryptr) // initialize the first page if we have no entry pointer and set it to it
 		initial(get_page(), 1);
 
-	//mainpage = (klistheader_t*)(gentryptr->ptr); // set our mainpage listheader struct before looking for first fit
+	mainpage = (klistheader_t*)(gentryptr->ptr); // set our mainpage listheader struct before looking for first fit
 
 	// Now we call our findfit function that will search list and return ptr to freelist struct that fits, if not in list it will also make a new page and add a new freelist struct and return that. In addition, it will do some tricks to save some space
 	ret = findfit(size);
 
+	mainpage->numalloc++;
+	(((klistheader_t*)(((kfreelist_t*)ret)->whichpage))->numalloc)++; // increase number allocated on the page we added
 	return ret;
 	
 }
@@ -114,9 +116,13 @@ kma_malloc(kma_size_t size)
 void
 kma_free(void* ptr, kma_size_t size)
 {
+	// decrease number allocated
+	(((klistheader_t*)(gentryptr->ptr))->numalloc)--;
+	
 	// function to add ptr with size to list
 	add(ptr, size);
-
+	(((klistheader_t*)(((kfreelist_t*)ptr)->whichpage))->numalloc)--;
+	
 	// function to check pages and free/release a page if it has no mallocs
 	resolve();
 }
@@ -144,9 +150,8 @@ kpage_t* initial(kpage_t* page, int first)
 	// Add new resource which is the full page to the linked list
 	add( ((void*)(listheader->header)), (PAGESIZE - sizeof(klistheader_t)));
 
-	//(*listheader).numpages = 0;
-	//(*listheader).numalloc = 0;
-	//(*listheader).freememory = (void*)((long int)listheader + sizeof(klistheader_t));
+	(*listheader).numpages = 0;
+	(*listheader).numalloc = 0;
 	
 	return page;
 }
@@ -184,7 +189,9 @@ void* findfit(int size)
   //kpage_t* newpage;
   //newpage = initial(get_page(), 0);
 	initial(get_page(), 0);
-
+	// update numpages on main page
+	mainpage->numpages++;
+	
 	return findfit(size);
   
   // remove the new page's initial resource from free list since initial made it
@@ -198,6 +205,12 @@ void add(void* ptr, int size) // adds pointer to free space based on our list
   klistheader_t* mainpage;
   mainpage = (klistheader_t*)(gentryptr->ptr);
 	void* temp = (void*)(mainpage->header);
+	
+	kpage_t* temppage;
+	long int i = ((long int)ptr - (long int)mainpage) / PAGESIZE; // how far our page is by number of pages
+	temppage = (kpage_t*)((long int)mainpage + i * PAGESIZE); // the page we are adding a free resource to
+	((kfreelist_t*)ptr)->whichpage = temppage;
+	
 	
 	// case 1: adding the first one
 	if (temp == ptr)
@@ -221,6 +234,67 @@ void add(void* ptr, int size) // adds pointer to free space based on our list
 
 void resolve(void) // resolves list, looking for pages being used with no allocs and freeing them
 {
+	/* SIMPLE ALGORITHM PLUS EVEN IF IT DID TEST 5 WILL FAIL TOO MANY ALLOC'D PAGES
+	klistheader_t* mainpage = (klistheader_t*)(gentryptr->ptr);
+	kpage_t* temppage;
+	
+	//kpage_t* emptypage;
+
+	if (mainpage->numalloc == 0)
+	{
+		for (; mainpage->numpages > 0; (mainpage->numpages)--) // free all pages and remove all free resources
+		{
+			temppage = ((*(kpage_t**)((long int)mainpage + mainpage->numpages * PAGESIZE)));
+
+			//emptypage = ((kpage_t*)((long int)mainpage + mainpage->numpages * PAGESIZE));
+			free_page(temppage);
+		}
+		temppage = ((*(kpage_t**)((long int)mainpage + mainpage->numpages * PAGESIZE)));
+		gentryptr = 0;
+		free_page(temppage);
+	} */
+
+	
+	
+	// THIS NEEDS WORK...BETTER ALGORITHM FOR DYNAMICALLY FREEING PAGES BUT DOES NOT WORK, SEGFAULTS
+	klistheader_t* mainpage;
+	mainpage = (klistheader_t*)(gentryptr->ptr);
+	
+	kpage_t* temppage;
+	int i;
+	i = mainpage->numpages; // find the max page and go there first
+	int cont = 1;
+	do 
+	{
+		cont = 0;
+		temppage = (((kpage_t*)((long int)mainpage + i * PAGESIZE)));
+		// if that page has no malloc's, then first loop through free list and remove each one with page ptr, then free the page
+		kfreelist_t* temp = mainpage->header;
+		kfreelist_t* temp2;
+		if ( ((klistheader_t*)temppage)->numalloc == 0) // free this page!
+		{
+			while (temp != NULL)
+			{
+				temp2 = temp->nextbuffer;
+				if (temp->whichpage == temppage)
+					remove(temp);
+				temp = temp2;
+			}
+			cont = 1; //could be more free pages in descending order from end, let it continue
+			if (((klistheader_t*)(temppage->ptr)) == mainpage)
+			{
+				gentryptr = 0;
+				cont = 0;
+			}
+			//((klistheader_t*)temppage)->itself = (void*)temppage;
+			//temppage->ptr = ((kpage_t*)((klistheader_t*)temppage)->itself);
+			
+			free_page(temppage);
+			if (gentryptr)
+				(mainpage->numpages)--;
+			i--;
+		}
+	} while(cont);
 }
 
 void remove(void* ptr) // removes pointer from list
@@ -234,7 +308,6 @@ void remove(void* ptr) // removes pointer from list
   // case 1: head by itself
   if ( tempnext == NULL && tempprev == NULL)
   {
-    // get rid of all pages?
 		klistheader_t* mainpage = (klistheader_t*)(gentryptr->ptr);
 		mainpage->header = NULL;
     gentryptr = 0;
