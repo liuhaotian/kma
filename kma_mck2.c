@@ -170,10 +170,10 @@ kma_free(void* ptr, kma_size_t size)
 	if((*thepage).numalloc==0){
 		(*thepage).full=0;
 		
-		if(roundsize==8192){
+		if(roundsize==8192){// we cannot use all the page to store the data, as the header exist, but all the request are less than 8000, we can still alloc that
 			unlinkbufaddr(&((*mainpage).p2fl[9]), (kbuffer_t*)((long int)thepage + sizeof(kpageheader_t)));
 		}
-		else if(roundsize==4096){
+		else if(roundsize==4096){// due to the header, we cannot divide the page into two block of 4096
 			unlinkbufaddr(&((*mainpage).p2fl[8]), (kbuffer_t*)((long int)thepage + sizeof(kpageheader_t)));
 		}
 		else{

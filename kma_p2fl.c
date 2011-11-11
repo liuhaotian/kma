@@ -118,8 +118,8 @@ kma_malloc(kma_size_t size)
 		temppage=(klistheader_t*)((long int)mainpage + i * PAGESIZE);
 		ret=(void*)(((*temppage).p2fl[listindex]).buffer);
 		((*temppage).p2fl[i]).buffer=(kbuffer_t*)((*((kbuffer_t*)ret)).nextbuffer);
-		(*temppage).numalloc++;
-		(*mainpage).numalloc++;
+		(*temppage).numalloc++;//	current page's number of malloc
+		(*mainpage).numalloc++;//	global number of malloc
 		return ret;
 	}
 	else if((i=chkfreespace(size)))
@@ -178,12 +178,12 @@ kma_free(void* ptr, kma_size_t size)// when delete, we add the buffer to the gen
 			free_page(temppage);
 		}*/
 		page0 = *(kpage_t**)(temppage);
-		initial(page0);
+		initial(page0);// it is no use, but we must keep all the pages sequential, so just initialize it
 		//free_page(page0);
 		//(*mainpage).numpages is -1 no
 		//gentryptr=0;//all pages are free
 	}
-	if((*mainpage).numalloc==0){
+	if((*mainpage).numalloc==0){//	there is nothing left, we must free all
 		kpage_t* page1;
 		page1 = *(kpage_t**)(mainpage);
 		for(; (*mainpage).numpages >0; (*mainpage).numpages--)
@@ -221,7 +221,7 @@ kpage_t* initial(kpage_t* page){
 	}
 	(*listheader).numpages=0;
 	(*listheader).numalloc=0;
-	(*listheader).freememory=(void*)((long int)listheader+sizeof(klistheader_t));
+	(*listheader).freememory=(void*)((long int)listheader+sizeof(klistheader_t));//	the point to indicate that from this point, we have free space
 	return page;
 }
 
@@ -232,12 +232,12 @@ int chkfreespace(kma_size_t size){
 	for(i=0; i<=(*mainpage).numpages; i++)
 	{
 		temppage = (klistheader_t*)((long int)mainpage + i * PAGESIZE);
-		if((PAGESIZE+(long int)temppage-(long int)((*temppage).freememory))/(size+sizeof(kbuffer_t)))return i+1;
+		if((PAGESIZE+(long int)temppage-(long int)((*temppage).freememory))/(size+sizeof(kbuffer_t)))return i+1;// if there is free space left
 	}
 	return 0;
 }
 
-int chkfreelist(kma_size_t size){
+int chkfreelist(kma_size_t size){// if there is a free buffer in the free list, we just use it
 	klistheader_t* mainpage=(klistheader_t*)(gentryptr->ptr);
 	klistheader_t* temppage;
 	int i;

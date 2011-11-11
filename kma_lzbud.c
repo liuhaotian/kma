@@ -252,7 +252,7 @@ kma_free(void* ptr, kma_size_t size)
 			(*temppage).numpages--;
 		}
 		
-		if((*temppage).numpages==0){
+		if((*temppage).numpages==0){// there is some chance to free a page
 			temppage=mainpage;
 			previouspage=0;
 			while(temppage){
@@ -291,7 +291,7 @@ kma_free(void* ptr, kma_size_t size)
 			(*temppage).numpages--;
 		}
 
-
+		// try to free a new buffer from locally to globally, and try to free it
 		kpageheader_t* thatpage=0;
 		kmainheader_t* thattemppage=mainpage;
 		kmainheader_t* thatpreviouspage=0;
@@ -306,8 +306,8 @@ kma_free(void* ptr, kma_size_t size)
 			tempptr=(*tempptr).nextbuffer;
 		}
 		
-		if(thatptr==0){;}
-		else{
+		if(thatptr==0){;}// do nothing when nothing happens
+		else{// we try to free that page
 			theaddr=(void*)(((long int)(((long int)thatptr-(long int)mainpage)/PAGESIZE))*PAGESIZE+(long int)mainpage);
 			// find that page header
 			while(!thatpage){

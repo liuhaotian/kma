@@ -437,21 +437,21 @@ klistheader_t* combi_bud(klistheader_t* bud_list, kpageheader_t* bud_page){
 	return ret;
 }
 
-void insertbuffer(klistheader_t* thefreelist, kbuffer_t* thebuffer){
+void insertbuffer(klistheader_t* thefreelist, kbuffer_t* thebuffer){// insert the free buffer to the list it belonging to
 	kbuffer_t* temp;
 	temp=(*thefreelist).buffer;
 	(*thefreelist).buffer=thebuffer;
 	(*thebuffer).nextbuffer=temp;
 }
 
-kbuffer_t* unlinkbuffer(klistheader_t* thefreelist){
+kbuffer_t* unlinkbuffer(klistheader_t* thefreelist){// just unlink the very first free buffer in the free list
 	kbuffer_t* ret;
 	ret=(*thefreelist).buffer;
 	(*thefreelist).buffer=(*ret).nextbuffer;
 	return (kbuffer_t*)ret;
 }
 
-kbuffer_t* unlinkbufaddr(klistheader_t* thefreelist, kbuffer_t* thebufaddr){
+kbuffer_t* unlinkbufaddr(klistheader_t* thefreelist, kbuffer_t* thebufaddr){// unlink the buffer for a certain address
 	kbuffer_t* ret = 0;
 	void* thenextbuffer;
 	thenextbuffer=(*thefreelist).buffer;
